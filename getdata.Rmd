@@ -1,0 +1,585 @@
+---
+title: "Snusning och mortalitet, databearbetning"
+author: "Byhamre & Broström"
+date: "`r Sys.time()`"
+output:
+  bookdown::pdf_document2:
+    citation_package: natbib
+    keep_tex: yes
+    number_sections: yes
+    toc: yes
+    toc_depth: 3
+  bookdown::word_document2:
+    toc: no
+    toc_depth: 2
+  bookdown::html_document2:
+    number_sections: yes
+    toc: yes
+    toc_depth: 2
+    toc_float: yes
+citation_package: natbib
+classoption: titlepage
+bibliography: bio.bib
+titlepage: yes
+biblio-style: apalike
+documentclass: article
+fontsize: 11pt
+header-includes:
+- \usepackage[utf8]{inputenc}
+- \usepackage{graphicx}
+- \usepackage{a4wide}
+#- \usepackage[tablesonly]{endfloat}
+#- \renewcommand{\efloatseparator}{\mbox{}}
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,comment = "")
+source("R/tbl.R")
+```
+
+# Read data
+
+The data file *utdrag.dta* seems to be of stata format, so we try to read it with 
+the function *read_dta* in the package *haven*.
+
+```{r haven}
+library(haven)
+utd <- as.data.frame(read_spss("Data/vip.sav"))
+##names(utd)
+```
+
+# Basala edits
+
+```{r sample}
+library(xtable)
+m0 <- NROW(utd)
+utd <- utd[!is.na(utd$h1a) & (utd$h1a == 1), ]
+m1 <- NROW(utd)
+weq2 <- with(utd, is.na(h4) |
+              (!is.na(h4)  &  (h4 == 9))  |
+              (!is.na(h1b) &  (h1b == 1)) |
+              (!is.na(h1c) &  (h1c == 1)) |
+              (!is.na(h1d) &  (h1d == 1)) |
+              (!is.na(h1e) &  (h1e == 1)) |
+              (!is.na(h1f) &  (h1f == 1)) |
+              (!is.na(h1g) &  (h1g == 1)) |
+              (!is.na(h1antal) &  !is.na(h1antal)) |
+              (!is.na(h1ofta) &  !is.na(h1ofta))
+  )
+utd <- utd[!weq2, ]
+m2 <- NROW(utd)
+
+utd$sex <- factor(utd$sex, labels = c("Men", "Women"))
+utd$snususe <- cut(utd$h4, c(0.5, 1.5, 2.5, 7), 
+                   labels=c("Never", "Former", "Current"))
+utd$birthdate <- as.Date(utd$fyear)
+
+utd <- utd[utd$birthdate < as.Date("1986-01-01"), ]
+m3 <- NROW(utd)
+
+utd$DODSDAT <- as.numeric(utd$DODSDAT)
+weq <- which(!is.na(utd$DODSDAT) & utd$DODSDAT %% 10000 == 0)
+utd <- utd[-weq, ]
+m4 <- NROW(utd)
+
+hc <- with(utd, !is.na(DODSDAT) & DODSDAT %% 100 == 0)
+utd$DODSDAT[hc] <- utd$DODSDAT[hc] + 15
+utd$deathdate <- as.Date(as.character(utd$DODSDAT), format = "%Y%m%d")
+## summary(utd)
+```
+
+weq = `r weq`.
+
+Vi började med `r m0` deltagare. Därefter exkluderade vi `r m0-m1` individer som är tidigare eller nuvarande rökare. Kvarstår `r m1` deltagare. Sedan exkluderades `r m1-m2` individer som hade saknade data gällande rökning/snusning eller paradoxala rökdata, vilket gav `r m2` deltagare kvar. Därefter exkluderades personer som undersökts innan ca 30 års ålder, dvs födda 1986 och senare, totalt `r m2-m3` st. Samplet består nu av `r m3` deltagare. Vi exkluderar sedan personer som endast har årtal angivet i dödsdatum, dvs `r m3-m4` personer, kvarstår `r m4` deltagare. För de individer som hade angivet årtal samt månad men ej dag, `r sum(hc)` st, ändrades dag till 15. 
+
+# Överlevnadsvariabler
+
+```{r survdata}
+utd$event <- !is.na(utd$deathdate)
+utd$age <- with(utd, as.numeric((provdat - birthdate) / 365.25)) # Nytt den 30 Mars
+
+slutdat <- utd$deathdate
+slutdat[is.na(slutdat)] <- as.Date("2015-09-17")
+utd$exit <- with(utd, as.numeric((slutdat - birthdate) / 365.25) - age) # Nytt!
+```
+
+# Omkodningar
+
+## Ensamboende
+
+```{r livingalone}
+utd$b3h[is.na(utd$b3h)] <- 0
+utd$livingalone <- factor(utd$b3h, labels = c("No", "Yes"))
+```
+
+## Diabetes
+```{r diabetes}
+utd$diabetes <- cut(utd$diabwho, c(-1, 0.5, 3.5, 4.5), 
+                    labels = c("No", "Prediabetes", "Diabetes"))
+table(utd$diabetes, useNA = "ifany")
+```
+
+## Duration av snusning
+```{r duration}
+utd$duration <- cut(utd$h5, seq(0, 50, by=5), right = FALSE)
+```
+
+## Alkoholberoende
+```{r dependent}
+
+### Koda om i2-i5
+
+#### Koda om 9 till missing
+is.na(utd$i1) <- is.na(utd$i1) | (utd$i1 == 9 & !is.na(utd$i1))
+is.na(utd$i2) <- is.na(utd$i2) | (utd$i2 == 9 & !is.na(utd$i2))
+is.na(utd$i3) <- is.na(utd$i3) | (utd$i3 == 9 & !is.na(utd$i3))
+is.na(utd$i4) <- is.na(utd$i4) | (utd$i4 == 9 & !is.na(utd$i4))
+is.na(utd$i5) <- is.na(utd$i5) | (utd$i5 == 9 & !is.na(utd$i5))
+
+#### Definiera "beroende"
+utd$i2b <- !is.na(utd$i2) & utd$i2 == 1
+with(utd, table(i2, i2b, useNA = "ifany"))
+
+utd$i3b <- !is.na(utd$i3) & utd$i3 == 1
+with(utd, table(i3, i3b, useNA = "ifany"))
+
+utd$i4b <- !is.na(utd$i4) & utd$i4 == 1
+with(utd, table(i4, i4b, useNA = "ifany"))
+
+utd$i5b <- !is.na(utd$i5) & utd$i5 == 1
+with(utd, table(i5, i5b, useNA = "ifany"))
+
+b1 <- utd$i1 !=1 & !is.na(utd$i1)
+b2 <- with(utd, i2b + i3b + i4b + i5b >= 2)
+beroende <- b1 & b2
+
+#table(beroende)>
+
+#### Definiera "ej beroende"
+e1 <- utd$i1 == 1 & !is.na(utd$i1)
+e2 <- !b2
+inte <- e1 | e2
+
+#table(inte)
+
+#### Definiera "vet ej" dvs missing
+totmiss <- with(utd, is.na(i2) + is.na(i3) + is.na(i4) + is.na(i5))
+is.na(beroende) <- (!beroende & !inte) | totmiss >= 3 
+
+table(beroende, useNA = "ifany")
+
+### Koda om j-frågor
+
+#### Koda om 9 till missing
+is.na(utd$j06) <- is.na(utd$j06) | (utd$j06 == 9 & !is.na(utd$j06))
+is.na(utd$j07) <- is.na(utd$j07) | (utd$j07 == 9 & !is.na(utd$j07))
+is.na(utd$j11) <- is.na(utd$j11) | (utd$j11 == 9 & !is.na(utd$j11))
+is.na(utd$j12) <- is.na(utd$j12) | (utd$j12 == 9 & !is.na(utd$j12))
+
+#### Definiera "beroende"
+utd$j06b <- !is.na(utd$j06) & utd$j06 %in% 2:5
+with(utd, table(j06, j06b, useNA = "ifany"))
+
+utd$j07b <- !is.na(utd$j07) & utd$j07 %in% 2:5
+with(utd, table(j07, j07b, useNA = "ifany"))
+
+utd$j11b <- !is.na(utd$j11) & utd$j11 == 1
+with(utd, table(j11, j11b, useNA = "ifany"))
+
+utd$j12b <- !is.na(utd$j12) & utd$j12 == 1
+with(utd, table(j12, j12b, useNA = "ifany"))
+
+jberoende <- with(utd, j06b + j07b + j11b + j12b >= 2)
+
+#table(jberoende)
+
+#### Definiera "ej beroende"
+jinte <- !jberoende
+
+#table(jinte)
+
+#### Definiera "vet ej" dvs missing
+jtotmiss <- with(utd, is.na(j06) + is.na(j07) + is.na(j11) + is.na(j12))
+is.na(jberoende) <- (!jberoende & !jinte) | jtotmiss >= 3 
+
+table(jberoende, useNA = "ifany")
+
+#### Skapa kombinerad alkoholberoendevariabel
+utd$dependent <- ifelse(is.na(beroende), jberoende, beroende)
+table(utd$dependent, useNA = "ifany")
+
+```
+
+
+## Skapa cancervariabel
+
+```{r cancer}
+x <- substr(utd$ULORSAK, 1, 1)
+cancer10 <- x=="C"
+
+table(cancer10)
+
+y <- substr(utd$ULORSAK, 1, 3)
+y <- as.numeric(y)
+cancer09 <- !is.na(y) & y %in% 140:208
+
+table(cancer09, useNA = "ifany")
+
+utd$cancer <- cancer09 | cancer10
+table(utd$cancer, useNA = "ifany")
+
+```
+
+## Skapa hjärtkärlvariabel
+
+```{r cardiovascular}
+
+x <- substr(utd$ULORSAK, 1, 1)
+cardio10 <- x=="I"
+
+table(cardio10, useNA = "ifany")
+
+y <- substr(utd$ULORSAK, 1, 3)
+y <- as.numeric(y)
+cardio09 <- !is.na(y) & y %in% 390:459
+
+table(cardio09, useNA = "ifany")
+
+utd$cardiovascular <- cardio09 | cardio10
+table(utd$cardiovascular, useNA = "ifany")
+
+```
+
+## Skapa variabel för död av yttre orsaker
+
+```{r external}
+
+x <- substr(utd$ULORSAK, 1, 1)
+ext10 <- x %in% c("V", "W", "X", "Y", "S", "T")
+
+table(ext10, useNA = "ifany")
+
+y <- substr(utd$ULORSAK, 1, 3)
+y <- as.numeric(y)
+ext09a <- !is.na(y) & y %in% 800:999
+
+z <- substr(utd$ULORSAK, 1, 1)
+ext09b <- z=="E" & utd$deathdate <as.Date("1997-01-01")
+
+ext09 <- ext09a | ext09b
+
+table(ext09, useNA = "ifany")
+
+utd$external <- ext09 | ext10
+table(utd$external, useNA = "ifany")
+
+```
+
+## Skapa variabel för okänd dödsorsak
+
+```{r unknown}
+
+x <- substr(utd$ULORSAK, 1, 1)
+un10 <- x == "R"
+x2 <- substr(utd$ULORSAK, 2, 3)
+x2 <- as.numeric(x2)
+un10 <- un10 & x2 %in% 95:99
+
+table(un10, useNA = "ifany")
+
+y <- substr(utd$ULORSAK, 1, 3)
+un09 <- y=="798"
+
+table(un09, useNA = "ifany" )
+
+ununiversal <- with(utd, event & ULORSAK=="")
+
+table(ununiversal, useNA = "ifany" )
+
+utd$unknown <- un09 | un10 | ununiversal
+table(utd$unknown, useNA = "ifany")
+
+```
+
+## Skapa kategori för död av övriga sjukdomar
+
+```{r other}
+
+utd$other <- with(utd, event & !(cardiovascular | cancer | external | unknown))
+
+table(utd$other, useNA = "ifany" )
+
+```
+
+## Kombinera till dödsorsaksvariabel
+
+```{r deathcause}
+
+utd$deathcause <- NA
+utd$deathcause[utd$cardiovascular] <- "Cardiovascular"
+utd$deathcause[utd$cancer] <- "Cancer"
+utd$deathcause[utd$other] <- "Other"
+utd$deathcause[utd$external] <- "External"
+utd$deathcause[utd$unknown] <- "Unknown"
+utd$deathcause <- as.factor(utd$deathcause)
+
+table(utd$deathcause, useNA = "ifany" )
+
+```
+
+## Skapa variabel för utbildningsnivå för undersökningsåret
+
+### Läs in inkomst- och utbildningsnivådata
+
+```{r readincomeedu}
+library(haven)
+inkutb <- read_dta("Data/ses_ink_utb.dta")
+
+nmes <- paste0("Sun2000niva_old_", 1990:2014)
+n <- NROW(inkutb)
+edu <- numeric(n)
+
+options(warn = -1)
+for (i in 1:n) edu[i] <- max(as.numeric(inkutb[i, nmes]), na.rm = TRUE)
+nas <- (edu == 9) | (edu <= 0)
+options(warn = 0)
+edu[nas] <- NA
+
+indx <- match(utd$LopNr, inkutb$LopNr)
+utd$utb <- edu[indx]
+
+table(utd$utb, useNA = "ifany")
+
+```
+
+Mycket bättre!
+
+
+```{r educationfusk}
+
+##is.na(utd$utb) <- utd$utb %in% c("", "9")
+##utd$utb <- as.numeric(utd$utb)
+utd$education <- cut(utd$utb, c(0, 2.5, 4.5, 7.5), 
+                     labels = c("low", "medium", "high"))
+
+table(utd$education, useNA = "ifany")
+
+```
+
+## Boende, urban/rural
+
+```{r urbrur}
+vcn <- sort(unique(utd$vcnamn))
+Sys.setlocale("LC_COLLATE", "sv_SE.UTF-8")
+vcn.SE <- sort(unique(utd$vcnamn))
+nn <- length(vcn.SE)
+vclist <- data.frame(namn = vcn.SE, kod = 1:nn)
+indx <- match(utd$vcnamn, vclist$namn)
+utd$vckod <- vclist$kod[indx]
+##
+xx <- with(utd, table(utd$vckod, useNA = "ifany"))
+vclist$rader <- xx
+names(vclist) <- c("Namn", "Kod", "Antal rader")
+ruralnr = c(1, 4, 5, 7, 9, 14, 20, 21, 22, 24, 29, 
+            30, 32, 33, 36, 39, 42, 46, 50, 51, 52, 55)
+vclist$Boende <- factor(vclist$Kod %in% ruralnr, 
+                        labels = c("urban", "rural"))
+utd$Boende <- vclist$Boende[indx]
+tbl(vclist[1:30,], caption = "Vårdcentraler I")
+```
+
+```{r urbrur2}
+tbl(vclist[31:nn,], caption = "Vårdcentraler II")
+```
+
+**NOTERA:** *Anders Isakssons* två fall har blivit bortsorterade.
+
+## Inkomst
+
+Rådata ser ut så här:
+
+```{r inko}
+inkut <- as.data.frame(inkutb[inkutb$LopNr %in% utd$LopNr, ])
+saveRDS(inkut, file = "Rdata/inkut.rds")
+inkom <- inkut[ ,substr(names(inkut), 1, 8) %in% c("DispInk_", "DispInk0")]
+##
+## Trolla bort '04' från variabelnamnen som har det, dvs tecknen 8 och 9:
+##
+x <- names(inkom)
+y <- x[-(1:14)] # y = x utom de första 14 elementen som är OK.
+y1 <- substr(y, 1,7) # 7 första tecknen
+y2 <- substr(y, 10, 100) # Hoppa över 8 och 9! Lägg ihop:
+z <- paste0(y1, y2)
+## Stoppa in z i x från position 15:
+nn <- length(x)
+x[15:nn] <- z
+## Ersätt variabelnamnen med x:
+names(inkom) <- x
+##
+## Färdigtrollat!! Fortsätt som förut:
+## (men kom ihåg att fixa us_ar = 1989)
+##
+inkom$LopNr <- inkut$LopNr
+##indx <- match(inkom$LopNr, utd$LopNr)
+inkom$us_ar <- inkut$us_ar
+inkom[inkom$LopNr == 62, ]
+saveRDS(inkom, file = "Rdata/inkom.rds")
+```
+
+Individen med löpnummer 62,
+i *brett format*, hopplöst att arbeta med! Vi konverterar till långt format:
+
+```{r inkolong}
+library(tidyr)
+linkom <- as.data.frame(gather(inkom, year, income, DispInk_1990:DispInk_2013, 
+                               factor_key = FALSE))
+linkom$year <- as.numeric(substr(linkom$year, 9, 12))
+tbl(linkom[linkom$LopNr == 62, ], caption = "Individ 62, långt format.", fs = 5)
+saveRDS(linkom, file = "Rdata/linkom.rds")
+```
+
+Se Tabell \@ref(tab:inkolong), med 14 rader för individ nr 62! Och se så enkelt det är att 
+plocka fram inkomsten undersökningsåret:
+
+```{r}
+with(linkom[linkom$LopNr == 62, ], income[year == us_ar])
+```
+
+OK, vi går vidare:
+
+```{r puton uincome}
+indx <- with(linkom, match(LopNr, LopNr))
+linkom$uincome <- rep(NA, nrow(linkom)) # preliminary
+ix <- with(linkom, year == us_ar) # Logical vector.
+linkom$uincome.prel[ix] <- linkom$income[ix]
+linkom <- linkom[order(linkom$LopNr, linkom$year), ]            
+```
+
+Nu försöker jag lägga på *Inkomst* vid undersökningsåret, eller 2013 om us_ar > 2013.
+Värdet för 1990 om us_ar = 1989.
+
+```{r laggpa, cache = FALSE}
+source("R/getuink2.R")
+res <- getuink2(linkom) #Tar lång tid!!
+indx <- match(utd$LopNr, res$LopNr)
+utd$uincome <- res$uincome[indx]
+utd$uinklag <- res$lag[indx]
+```
+
+## Frukt och grönt
+
+```{r matdata}
+(urvarnames <- paste0("mat", 24:29))
+mat <- utd[, names(utd) %in% urvarnames]
+mat$LopNr <- utd$LopNr
+tbl(head(mat), caption = "Gröna data ...")
+```
+
+Se Tabell \@ref(tab:matdata).
+
+```{r recode}
+source("R/green.R")
+utd <- green(utd)
+```
+
+# Konsumentprisindex
+
+Jag har inte hittat nerladdningsbara data, men väl läsbara på SCBs web. Jag skrev av:
+
+```{r}
+kpi <- read.table("Data/kpi.csv", header = TRUE, skip = 2)
+kpi
+```
+
+Skriva av är inget jag rekommenderar, risken för misstag är för stor. Kan du kolla dessa data, 
+genom att hitta information någonstans? Är ingen stor katastrof om nån siffra inte stämmer, och grafen ser ju rimlig ut 
+(Figur \@ref(fig:kpifig)). 
+
+```{r kpifig, fig.cap = "Årliga konsumentprisindex, basår 1980."}
+par(las = 1)
+with(kpi, plot(Year, KPI, col = "blue", type = "b"))
+```
+
+**Uppdatering:** Jag lägger på de data om kpi jag har (2022-03-27) i  variabeln *income.90* (referens = 1990).
+
+```{r inc90}
+kpi$KPI <- kpi$KPI/ kpi$KPI[kpi$Year == 1990]
+year <- utd$us_ar - utd$uinklag
+indx <- match(year, kpi$Year)
+utd$income.90 <- round(utd$uincome / kpi$KPI[indx])
+```
+
+# Remove some
+
+Create a list of the removable variable names:
+
+```{r}
+nms <- names(utd)
+weq <- c("plats", nms[substr(nms, 1, 1) == "g"], "h1antal", "h1ofta", "h2",
+         "h3", "stg", "ldl", "hdl", "dbt", "b1", "b3a", "b3b", "b3c", "b3d", "b3e",
+         "b3f", "b3g", "c1", "c2", "c3", paste0("c5", letters[1:6]), "c6", 
+         paste0("j0", c(1:5, 8:9)), "j10", nms[substr(nms, 1, 8) == "perweek2"],
+         paste0("mat", 61:65), "Kommun", "marital")
+vip <- utd[, !(nms %in% weq)]
+vip$green <- utd$green # Was removed above ("alla g-variabler")
+```
+
+
+# Save in R format and rename slightly
+
+But first, Sume cleaning is done:
+
+*   (vip$h1a <- vip$h1b <- vip$h1c <- vip$h1d <- vip$h1e <- vip$h1f <- vip$h1g <- NULL)
+*   Underscore changed to dot in variable names.
+*   *us.ar* recoded by subtraction of 1990: 1990 is now the *reference year* 
+(instead of year 0, which not even exist).
+
+```{r save}
+##vip$diabetes <- as.character(vip$diabetes)
+##vip$diabetes[is.na(vip$diabetes)] <- "unknown"
+##vip$diabetes <- factor(vip$diabetes)
+##
+##vip$dependent <- as.character(vip$dependent)
+##vip$dependent[is.na(vip$dependent)] <- "unknown"
+##vip$dependent <- factor(vip$dependent)
+##
+vip$h1a <- vip$h1b <- vip$h1c <- vip$h1d <- vip$h1e <- vip$h1f <- vip$h1g <- NULL
+
+names(vip) <- gsub("_", ".", names(vip))  # Tillagt 30 Mars 2022.
+```
+
+# Centering of some covariates and some new
+
+Note the new variable *inc.90*: It is the *quartiles* of *income.90*.
+
+```{r centering}
+vip$us.ar <- vip$us.ar - 1990 ## Tillagt 3 April 2022.
+vip$late <- vip$age - vip$alder.VIP
+##
+vip$alder.VIP <- as.factor(vip$alder.VIP)
+vip$age <- vip$age - 40
+vip$bmi <- vip$bmi - 25
+vip$sbt <- vip$sbt - 120
+br <- quantile(vip$income.90, na.rm = TRUE)
+vip$inc.90 <- cut(vip$income.90, breaks = br, 
+                  labels = paste0("Q", 1:4))
+##vip$inc.90 <- relevel(vip$inc.90, ref = "Q1")
+saveRDS(vip, file = "Rdata/vip.rds")
+```
+
+# Testing output format
+
+V skippar det nu. (Tjafs med missing i 'green'.)
+
+```{r outin, results='asis', eval = FALSE}
+library(eha)
+source("R/ltxCoef3.R")
+fit <- coxreg(Surv(exit, event) ~ age + sex + snususe + green + strata(alder.VIP),
+              data = vip)
+dr <- drop1(fit, test = "Chisq")
+ltxCoef3(fit, digits = 4, dr = dr, 
+         caption = "Mortality with snus and vegetables, stratified on 'alder.VIP'.")
+```
+
+
+

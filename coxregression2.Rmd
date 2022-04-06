@@ -1,0 +1,105 @@
+---
+title: "Cox regression"
+author: "Byhamre"
+date: "`r Sys.Date()`"
+output:
+  bookdown::pdf_document2:
+    citation_package: natbib
+    keep_tex: yes
+    number_sections: yes
+    toc: no
+    toc_depth: 2
+  bookdown::html_document2:
+    number_sections: yes
+    toc: yes
+    toc_depth: 2
+    toc_float: yes
+  bookdown::word_document2:
+    toc: no
+    toc_depth: 2
+citation_package: natbib
+##classoption: titlepage
+bibliography: snus2.bib
+titlepage: no
+biblio-style: apalike
+documentclass: article
+fontsize: 11pt
+header-includes:
+- \usepackage[utf8]{inputenc}
+- \usepackage{graphicx}
+- \usepackage{sectsty}
+- \subsectionfont{\normalfont\itshape}
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, comment = "", fig.path = "figs/", cache = FALSE)
+library(eha)
+source("R/fit.out.R")
+source("R/tbl.R")
+source("R/unicode.R")
+options(show.signif.stars = FALSE)
+```
+
+# Read data
+
+```{r}
+vip <- readRDS("Rdata/vip.rds")
+source("R/ltx2.R")
+library(eha)
+```
+
+# Nya coxregressioner
+
+## All-cause mortality
+
+### Crude model
+
+```{r crudeall, results='asis'}
+fit <- coxreg(Surv(exit, event) ~ snususe, data = vip)
+ltx2(fit, label = "tab:crudeall", caption = "All-cause mortality, crude model.")
+```
+
+Interesting! It seems very protective to use snus! But see Table \@ref(tab:crudeallstrat).
+
+```{r crudeallstrat, results='asis'}
+fit2 <- coxreg(Surv(exit, event) ~ snususe + strata(alder.VIP), data = vip)
+ltx2(fit2, label = "tab:crudeallstrat", 
+         caption = "All-cause mortality, crude model, stratified by age at prov.")
+```
+
+After stratifying, snus is very dangerous! Please explain! (My advise is to stratify on
+alder.VIP in all analyses.)
+
+### Basic model
+```{r basicall, results='asis'}
+fit <- coxreg(Surv(exit, event) ~ sex + age +
+                   us.ar + snususe, data = vip)
+ltx2(fit, label = "tab:basicall", caption = "All-cause mortality, basic model.")
+```
+
+### Multivariable model
+```{r multiall, results='asis'}
+vip0 <- na.omit(vip[, c("exit", "event", "age", "snususe", "sex", "us.ar", "livingalone", "education", "Boende", "income.90", "phyact")])
+fit <- coxreg(Surv(exit, event) ~ snususe + age + sex + us.ar + livingalone + education + 
+                Boende + income.90 + phyact,  data = vip0)
+##dr = drop1(fit, test = "Chisq")
+##
+##ltxCoef3(fit, digits = 4, dr = dr, 
+  ##     caption = "All-cause mortality, multivariable model")
+ltx2(fit, caption = "All-cause mortality, multivariable model")
+```
+
+### Mediator model
+
+```{r mediatorall, results='asis'}
+library(eha)
+library(survival)
+source("R/ltxCoef3.R")
+vip0 <- na.omit(vip[, c("exit", "event", "snususe", "age", "sex", "us.ar", "education", "livingalone",  "income.90", "alder.VIP")])
+fit <- coxph(Surv(exit, event) ~ snususe + education + livingalone + us.ar + age +
+                income.90 + I(as.factor(alder.VIP)),  data = vip0)##, dist = "gompertz", param = "lifeExp")
+dr = drop1(fit, test = "Chisq")
+ltxCoef3(fit, digits = 4, dr = dr, 
+         caption = "All-cause mortality, mediator model")
+```
+
