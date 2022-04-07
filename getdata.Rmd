@@ -45,7 +45,7 @@ the function *read_dta* in the package *haven*.
 ```{r haven}
 library(haven)
 utd <- as.data.frame(read_spss("Data/vip.sav"))
-##names(utd)
+
 ```
 
 # Basala edits
@@ -114,8 +114,8 @@ utd$livingalone <- factor(utd$b3h, labels = c("No", "Yes"))
 
 ## Diabetes
 ```{r diabetes}
-utd$diabetes <- cut(utd$diabwho, c(-1, 0.5, 3.5, 4.5), 
-                    labels = c("No", "Prediabetes", "Diabetes"))
+utd$diabetes <- cut(utd$diabwho, c(-1, 3.5, 4.5), 
+                    labels = c("No", "Yes"))
 table(utd$diabetes, useNA = "ifany")
 ```
 
@@ -209,7 +209,6 @@ utd$dependent <- ifelse(is.na(beroende), jberoende, beroende)
 table(utd$dependent, useNA = "ifany")
 
 ```
-
 
 ## Skapa cancervariabel
 
@@ -353,7 +352,6 @@ table(utd$utb, useNA = "ifany")
 ```
 
 Mycket bättre!
-
 
 ```{r educationfusk}
 
@@ -509,6 +507,12 @@ indx <- match(year, kpi$Year)
 utd$income.90 <- round(utd$uincome / kpi$KPI[indx])
 ```
 
+# Fysisk aktivitet, krävs omkodning
+```{r fysisk}
+utd$phyact <- factor(utd$phyact,
+labels = c("Sedentary", "Moderate activity", "Physically active"))
+```
+
 # Remove some
 
 Create a list of the removable variable names:
@@ -524,7 +528,6 @@ vip <- utd[, !(nms %in% weq)]
 vip$green <- utd$green # Was removed above ("alla g-variabler")
 ```
 
-
 # Save in R format and rename slightly
 
 But first, Sume cleaning is done:
@@ -535,14 +538,7 @@ But first, Sume cleaning is done:
 (instead of year 0, which not even exist).
 
 ```{r save}
-##vip$diabetes <- as.character(vip$diabetes)
-##vip$diabetes[is.na(vip$diabetes)] <- "unknown"
-##vip$diabetes <- factor(vip$diabetes)
-##
-##vip$dependent <- as.character(vip$dependent)
-##vip$dependent[is.na(vip$dependent)] <- "unknown"
-##vip$dependent <- factor(vip$dependent)
-##
+
 vip$h1a <- vip$h1b <- vip$h1c <- vip$h1d <- vip$h1e <- vip$h1f <- vip$h1g <- NULL
 
 names(vip) <- gsub("_", ".", names(vip))  # Tillagt 30 Mars 2022.
@@ -550,7 +546,7 @@ names(vip) <- gsub("_", ".", names(vip))  # Tillagt 30 Mars 2022.
 
 # Centering of some covariates and some new
 
-Note the new variable *inc.90*: It is the *quartiles* of *income.90*.
+Note the new variable *inc.90*: It is the *tertiles* of *income.90*.
 
 ```{r centering}
 vip$us.ar <- vip$us.ar - 1990 ## Tillagt 3 April 2022.
@@ -560,25 +556,26 @@ vip$alder.VIP <- as.factor(vip$alder.VIP)
 vip$age <- vip$age - 40
 vip$bmi <- vip$bmi - 25
 vip$sbt <- vip$sbt - 120
-br <- quantile(vip$income.90, na.rm = TRUE)
-vip$inc.90 <- cut(vip$income.90, breaks = br, 
-                  labels = paste0("Q", 1:4))
-##vip$inc.90 <- relevel(vip$inc.90, ref = "Q1")
+
+br <- quantile(vip$income.90, probs = c(0, 1/3, 2/3, 1), na.rm = TRUE)
+vip$inc.90 <- cut(vip$income.90, breaks = br, include.lowest = TRUE,
+                    labels = paste0("T", 1:3))
+
 saveRDS(vip, file = "Rdata/vip.rds")
 ```
 
 # Testing output format
 
-V skippar det nu. (Tjafs med missing i 'green'.)
+Vi skippar det nu. (Tjafs med missing i 'green'.)
 
 ```{r outin, results='asis', eval = FALSE}
-library(eha)
-source("R/ltxCoef3.R")
-fit <- coxreg(Surv(exit, event) ~ age + sex + snususe + green + strata(alder.VIP),
-              data = vip)
-dr <- drop1(fit, test = "Chisq")
-ltxCoef3(fit, digits = 4, dr = dr, 
-         caption = "Mortality with snus and vegetables, stratified on 'alder.VIP'.")
+#library(eha)
+#source("R/ltxCoef3.R")
+#fit <- coxreg(Surv(exit, event) ~ age + sex + snususe + green + strata(alder.VIP),
+#             data = vip)
+#dr <- drop1(fit, test = "Chisq")
+#ltxCoef3(fit, digits = 4, dr = dr, 
+#         caption = "Mortality with snus and vegetables, stratified on 'alder.VIP'.")
 ```
 
 
