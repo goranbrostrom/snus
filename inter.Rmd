@@ -1,0 +1,75 @@
+---
+title: "Interactions"
+author: "Göran Broström"
+date: "4/7/2022"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(eha)
+source("R/ltx2.R")
+vip <- readRDS("Rdata/vip.rds")
+```
+
+# livingalone and inc.90
+
+```{r withsnus}
+fit <- coxreg(Surv(exit, event) ~ livingalone * snususe + strata(alder.VIP), 
+              data = vip)
+drop1(fit, test = "Chisq")
+```
+
+Nothing remarkable.
+
+```{r withinc}
+fit <- coxreg(Surv(exit, event) ~ livingalone * inc.90 + snususe + strata(alder.VIP), 
+              data = vip)
+drop1(fit, test = "Chisq")
+```
+
+Oh dear, a very strong interaction, let's do separate analyses for livingalone categories:
+
+
+```{r livalone, results = "asis"}
+fit <- coxreg(Surv(exit, event) ~ snususe + inc.90 + strata(alder.VIP), 
+              data = vip[vip$livingalone == "Yes" & !is.na(vip$inc.90), ])
+ltx2(fit, caption = "Living alone.")
+```
+
+
+```{r notlivalone, results = "asis"}
+fit <- coxreg(Surv(exit, event) ~ snususe + inc.90 + strata(alder.VIP), 
+              data = vip[vip$livingalone == "No" & !is.na(vip$inc.90), ])
+ltx2(fit, caption = "Not living alone.")
+```
+
+Much stronger (negative) effects of both snuffing and low income for those 
+who live alone.
+
+Isn't this a finding worth mentioning?
+
+# livingalone and sex
+
+```{r sexsnus}
+fit <- coxreg(Surv(exit, event) ~ snususe + livingalone * sex + strata(alder.VIP), 
+              data = vip)
+drop1(fit, test = "Chisq")
+```
+
+Right, a significant interaction effect. Reanalyse by sex:
+
+```{r womsnus, results = 'asis'}
+fit <- coxreg(Surv(exit, event) ~ snususe + livingalone + strata(alder.VIP), 
+              data = vip[vip$sex == "Women", ])
+ltx2(fit, caption = "Women.")
+```
+
+```{r mensnus, results = 'asis'}
+fit <- coxreg(Surv(exit, event) ~ snususe + livingalone + strata(alder.VIP), 
+              data = vip[vip$sex == "Men", ])
+ltx2(fit, caption = "Men.")
+```
+
+# livingalone and cholesterol
+
