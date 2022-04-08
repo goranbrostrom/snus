@@ -1,0 +1,118 @@
+---
+title: "Gompertz"
+author: "Göran Broström"
+date: "`Sys.Date()`"
+output:
+  bookdown::pdf_document2:
+    citation_package: natbib
+    keep_tex: yes
+    number_sections: yes
+    toc: no
+    toc_depth: 2
+  bookdown::html_document2:
+    number_sections: yes
+    toc: yes
+    toc_depth: 2
+    toc_float: yes
+  bookdown::word_document2:
+    toc: no
+    toc_depth: 2
+citation_package: natbib
+##classoption: titlepage
+bibliography: snus2.bib
+titlepage: no
+biblio-style: apalike
+documentclass: article
+fontsize: 11pt
+header-includes:
+- \usepackage[utf8]{inputenc}
+- \usepackage{graphicx}
+- \usepackage{sectsty}
+- \subsectionfont{\normalfont\itshape}
+---
+
+# Introduction
+
+I'm interested in trying to fit the *Gompertz* distribution to the mortality analyses 
+with the *vip* data. Reason is that it is well-known that the Gompertz distribution
+fits adult mortality very well in general, and we can draw stronger conclusions
+with a parametric model compared to a semi-parametric one like Cox regression.
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Data
+
+```{r readvip}
+vip <- readRDS("Rdata/vip.rds")
+library(eha)
+```
+
+# Analysis of a simple model
+
+## Age 30 at prov
+
+```{r coxreg30, fig.cap = "Gompertz and non-parametric cumulative hazards, age 30."}
+vip30 <- vip[vip$alder.VIP == 30, ]
+fit.c <- coxreg(Surv(exit, event) ~ 1, data = vip30)
+fit.g30 <- phreg(Surv(exit, event) ~ 1, data = vip30, dist = "gompertz", param = "rate")
+check.dist(fit.c, fit.g30, main = "")
+```
+
+
+
+```{r coxreg40, fig.cap = "Gompertz and non-parametric cumulative hazards, age 40."}
+vip40 <- vip[vip$alder.VIP == 40, ]
+fit.c <- coxreg(Surv(exit, event) ~ 1, data = vip40)
+fit.g40 <- phreg(Surv(exit, event) ~ 1, data = vip40, dist = "gompertz", param = "rate")
+check.dist(fit.c, fit.g40, main = "")
+```
+
+
+
+```{r coxreg50, fig.cap = "Gompertz and non-parametric cumulative hazards, age 50."}
+vip50 <- vip[vip$alder.VIP == 50, ]
+fit.c <- coxreg(Surv(exit, event) ~ 1, data = vip50)
+fit.g50 <- phreg(Surv(exit, event) ~ 1, data = vip50, dist = "gompertz", param = "rate")
+check.dist(fit.c, fit.g50, main = "")
+```
+
+
+
+```{r coxreg60, fig.cap = "Gompertz and non-parametric cumulative hazards, age 60."}
+vip60 <- vip[vip$alder.VIP == 60, ]
+fit.c <- coxreg(Surv(exit, event) ~ 1, data = vip60)
+fit.g60 <- phreg(Surv(exit, event) ~ 1, data = vip60, dist = "gompertz", param = "rate")
+check.dist(fit.c, fit.g60, main = "")
+```
+
+
+## Check Gomperts baseline parameters
+
+```{r checkpar}
+out <- matrix(0, ncol = 2, nrow = 4)
+out[1, ] <- coef(fit.g30)
+out[2, ] <- coef(fit.g40)
+out[3, ] <- coef(fit.g50)
+out[4, ] <- coef(fit.g60)
+rownames(out) <- paste0("age.", 10 * (3:6))
+colnames(out) <- c("Rate", "Level")
+out[, 2] <- exp(out[, 2])
+source("R/tbl.R")
+out <- round(out, 4)
+tbl(out, rownames = TRUE, caption = "Gompertz estimated parameters")
+```
+
+## Comparing models
+
+We want to compare a model stratified by education with a model with education included 
+as a factor in the Gompertz setting.
+
+```{r factorvstrata}
+fit.f <- phreg(Surv(exit, event) ~ age + education, data = vip40, dist = "gompertz")
+fit.s <- phreg(Surv(exit, event) ~ age + strata(education), data = vip40, dist = "gompertz")
+anova(fit.f, fit.s)
+```
+
