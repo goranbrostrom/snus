@@ -1,0 +1,155 @@
+---
+title: "Cox regression, cardiovascular mortality"
+author: "Byhamre (comments by GB)"
+date: "`r Sys.Date()`"
+output:
+  bookdown::pdf_document2:
+    citation_package: natbib
+    keep_tex: yes
+    number_sections: yes
+    toc: no
+    toc_depth: 2
+  bookdown::html_document2:
+    number_sections: yes
+    toc: yes
+    toc_depth: 2
+    toc_float: yes
+  bookdown::word_document2:
+    toc: no
+    toc_depth: 2
+citation_package: natbib
+##classoption: titlepage
+bibliography: snus2.bib
+titlepage: no
+biblio-style: apalike
+documentclass: article
+fontsize: 10pt
+header-includes:
+- \usepackage[utf8]{inputenc}
+- \usepackage{graphicx}
+- \usepackage{sectsty}
+- \subsectionfont{\normalfont\itshape}
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, comment = "", fig.path = "figs/", cache = FALSE)
+library(eha)
+##source("R/fit.out.R") # Behövs inte här
+source("R/tbl.R")
+##source("R/unicode.R") # Behövs inte här
+source("R/ltx2.R")
+options(show.signif.stars = FALSE)
+```
+
+# Read data
+```{r read}
+vip <- readRDS("Rdata/vip.rds")
+br <- quantile(vip$income.90, probs = c(0, 1/3, 2/3, 1),
+               na.rm = TRUE)
+vip$income.90 <- cut(vip$income.90, breaks = br, 
+                     labels = c("low", "middle", "high"))
+vip$income.90 <- relevel(vip$income.90, ref = "middle")
+```
+
+**Kommentar:** *Har kategoriserat income.90 i tre kategorier, men du gör som du vill. Har också skrivit en ny funktion, 'ltx2',
+som kombinerar (och ersätter) de två 'drop1' och 'ltxCoef3'. Se chunken nedan.*
+
+**OBS:** *Du måste ta bort alla 'source("R/ltxCoef3.R")' i filen!*
+
+```{r tablech}
+x <- with(vip, table(cardiovascular, snususe))
+tbl(x, caption = "Snus use by cardio death.", rownames = TRUE)
+```
+
+In Table \@ref(tab:tablech) \ldots
+
+# Cardiovascular mortality
+
+## Crude model
+```{r crude, results='asis'}
+##library(eha)
+##source("R/ltxCoef3.R")
+fit2 <- coxreg(Surv(exit, cardiovascular) ~ snususe, data = vip)
+##dr2 <- drop1(fit2, test = "Chisq")
+##ltxCoef3(fit2, digits = 4, dr = dr2, label = "tab:crude", 
+##         caption = "Cardiovascular mortality, crude model.")
+ltx2(fit2, caption = "Cardiovascular mortality, crude model.", 
+     label = "tab:crude")
+```
+
+Se Tabell \@ref(tab:crude).
+
+
+**Kommentar:** *'library' och 'source' har du redan gjort i chunk 'setup'. Behöver inte upprepas.*
+
+
+## Basic model
+```{r basic, results='asis'}
+vip0 <- na.omit(vip[, c("exit", "cardiovascular", "age", 
+                        "snususe", "sex", "us.ar")])
+fit <- coxreg(Surv(exit, cardiovascular) ~ snususe + age + sex 
+              + us.ar, data = vip0)
+ltx2(fit, caption = "Cardiovascular mortality, basic model.", 
+     label = "tab:basic")
+```
+
+**Kommentar:** *'label = "tab:basic"' är frivilligt, men låter dig referera till 
+tabellnumret automatiskt, vilket är praktiskt, särskilt när man gör ommöbleringar mellan tabeller och figurer.*
+
+
+*Men kanske en figur piggar upp? Se Figur \@ref(fig:enfig). Kan vi se proportionaliteten?
+Notera också de små talen på y-axeln, en följd av att referensvärdet för age är 0 (noll).
+Vi extrapolerar alltså tillbaka till födelsen i figuren, vilket inte är så lyckat. Se sista kommentaren för åtgärd.*
+
+```{r, enfig, fig.cap = "Cumulative hazards, snuffing categories."}
+fit0 <- coxreg(Surv(exit, cardiovascular) ~ strata(snususe) + age + 
+                  sex + us.ar, data = vip0)
+par(lwd = 1.5) # 50% Tjocka(re) linjer!
+plot(fit0, col = 1:3, lty = c(1, 2, 4))
+```
+
+
+### Multivariable model
+
+```{r multi, results='asis'}
+vip0 <- na.omit(vip[, c("exit", "cardiovascular", "age", "snususe", 
+                        "sex", "us.ar", "livingalone", "education", 
+                        "Boende", "income.90", "phyact")])
+fit <- coxreg(Surv(exit, cardiovascular) ~ snususe + age + sex + 
+                 us.ar + livingalone + education + Boende + 
+                 income.90 + phyact,  data = vip0)
+ltx2(fit, 
+     caption = "Cardiovascular mortality, multivariable model.", 
+     label = "tab:multi")
+```
+
+Adjusted for age, sex, year of examination, education, income, living area, co-habiting, physical activity.
+
+**Fråga:** *Vad är 'multivariable'?*
+
+### Mediator model
+
+```{r mediator, results='asis'}
+vip0 <- na.omit(vip[, c("exit", "cardiovascular", "snususe", "age", 
+                        "alder.VIP", "sex", "us.ar", "livingalone", 
+                        "education", "Boende", "income.90", 
+                        "phyact", "dependent", "diabetes", "bmi",
+                        "skol", "sbt")])
+fit <- coxreg(Surv(exit, cardiovascular) ~ snususe + age + sex + 
+                 us.ar + livingalone + Boende + income.90 + 
+                 phyact + dependent + diabetes + bmi + skol + 
+                sbt + education,  data = vip0)
+ 
+ltx2(fit, caption = "Cardiovascular mortality, mediator model.", 
+     label = "tab:mediator.")
+```
+
+Adjusted for age, sex, year of examination, education, income, living area,
+co-habiting, physical activity, body mass index, total cholesterol, systolic 
+blood pressure, diabetes mellitus and risky drinking.
+
+**Fråga:** *Vilka är mediatorvariablerna och varför?*
+
+**Kommentar:** *Ser att variablerna 'age', 'bmi' och 'sbt' behöver "normaliseras",
+dvs vi bör subtrahera ett lämpligt referensvärde från alla. Förslag på referenser 
+("normala") värden?*
