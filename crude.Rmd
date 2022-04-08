@@ -1,0 +1,133 @@
+---
+title: "Crude mortality"
+author: "Göran Broström"
+date: "18 June 2021"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, comment = "", fig.height = 4, fig.path = "figs/")
+```
+
+# Introduction
+
+Just basic variables, birthdate, deathdate (if any), sex, snuffing, time for 
+VIP.
+
+# Read data and keep essentials
+
+```{r readdata}
+vip <- readRDS("Rdata/vip.rds")
+cr <- vip[, c("LopNr", "provdat", "fyear", "sex", "DODSDAT", "h1a", "h4")]
+cr$DODSDAT <- as.Date(as.character (cr$DODSDAT), format = "%Y%m%d")
+cr$sex <- factor(cr$sex, labels = c("male", "female"))
+summary(cr)
+```
+
+# Select never-smokers
+
+```{r neversmokers}
+#cr <- cr[!is.na(cr$h1a), ]
+#cr$h1a <- NULL
+```
+
+# Calculate ages
+
+```{r ages}
+cr$enter <- as.numeric(cr$provdat - cr$fyear) / 365.25
+cr$event <- !is.na(cr$DODSDAT)
+lastSeen <- cr$DODSDAT
+lastSeen[is.na(lastSeen)] <- as.Date("2015-12-31")
+cr$exit <- as.numeric(lastSeen - cr$fyear) / 365.25
+summary(cr)
+```
+
+OK, but need to remove individuals without information on snus habits, `r sum(is.na(cr$h4))`
+persons.
+
+```{r rmna}
+#cr <- cr[!is.na(cr$h4), ]
+#with(cr, table(h4))
+```
+
+
+
+```{r agprov, fig.cap = "Age distribution at baseline."}
+with(cr, hist(enter, xlab = "Age", main = "", breaks = 160))
+```
+
+The distribution of *age at prov*, see Figure \@ref(fig:agprov).
+
+# Coding snus use
+
+What is *h4 == 9*? Probably a missing-value-code, so we remove them.
+
+```{r h49}
+cr <- cr[cr$h4 != 9, ]
+```
+
+And we create a new variable `snuffer`, which is a recoding of `h4`:
+
+```{r recode}
+cr$snuffer <- cut(cr$h4, c(0, 1.5, 2.5, 6.5), labels = c("never", "previous", "current"))
+x <- with(cr, table(snuffer, event))
+round(with(cr, prop.table(x, margin = 1)) * 100, 2)
+```
+
+Somewhat surprising that there are relatively more deaths among never-snuffers,
+but it may be explained by the fact that they are older at `provdat`:
+
+```{r agebysnuff}
+with(cr, tapply(enter, snuffer, mean))
+```
+As expected.
+
+# Introducing age cohorts
+
+Ages at `provdat` are heaping around ages 30, 40, 50, and 60. We create a `cohort`
+accordingly.
+
+```{r cohort}
+cr$cohort <- cut(cr$enter, c(0, 35, 45, 55, 65), 
+                 labels = c("age_30", "age_40", "age_50", "age_60"))
+with(cr, table(cohort, event, sex))
+```
+
+
+Lets look at some cumulative hazards, with `age` as baseline time scale.
+
+```{r age, fig.cap = "Snuffers, age as time scale."}
+library(eha)
+fit0 <- coxreg(Surv(enter, exit, event) ~ snuffer, data = cr)
+##plot(fit0, xlab = "Age")
+summary(fit0)
+```
+
+Also as expected. With *time since provdat* as baseline time scale we get
+
+```{r sincenon, fig.cap = "Snuffers, duration as time scale, not 'adjusted' for age."}
+fit1 <- coxreg(Surv(exit - enter, event) ~ strata(snuffer), data = cr)
+plot(fit1, xlab = "Duration (years)")
+```
+
+
+
+```{r since, fig.cap = "Snuffers, duration as time scale, 'adjusted' for age (ref 40)."}
+fit2 <- coxreg(Surv(exit - enter, event) ~ I(enter - 40) + strata(snuffer), data = cr)
+plot(fit2, xlab = "Duration (years)")
+```
+
+Also as expected, since we have not adjusted for age. Let's do that, see Figure \@ref(fig:since).
+
+
+Adjusting also for `sex`:
+
+```{r sincesex, fig.cap = "Snuffers, duration as time scale, 'adjusted' for age (ref 40) and sex."}
+par(lwd = 1.5)
+fit3 <- pchreg(Surv(exit - enter, event) ~  strata(snuffer), 
+               cuts = seq(0, 25, by = 5), 
+               data = cr[cr$sex == "male" & cr$cohort == "age_60", ])
+plot(fit3, , fn = "haz", xlab = "Duration (years)")
+```

@@ -1,0 +1,201 @@
+---
+title: "Proportional hazards, women"
+author: "Göran Broström"
+date: "4/5/2022"
+output:
+  bookdown::pdf_document2:
+    citation_package: natbib
+    keep_tex: yes
+    number_sections: yes
+    toc: no
+    toc_depth: 2
+  bookdown::html_document2:
+    number_sections: yes
+    toc: yes
+    toc_depth: 2
+    toc_float: yes
+  bookdown::word_document2:
+    toc: no
+    toc_depth: 2
+citation_package: natbib
+##classoption: titlepage
+bibliography: snus2.bib
+titlepage: no
+biblio-style: apalike
+documentclass: article
+fontsize: 11pt
+header-includes:
+- \usepackage[utf8]{inputenc}
+- \usepackage{graphicx}
+- \usepackage{sectsty}
+- \subsectionfont{\normalfont\itshape}
+---
+
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+vip <- readRDS("Rdata/vip.rds")
+vip <- vip[vip$sex == "Women", ]
+##
+library(eha)
+library(survival)
+source("R/tbl.R")
+source("R/ltx2.R")
+```
+
+# Check of proportional hazards assumption
+
+Essentially two ways of checking proportional hazards with real data.
+
+## Graphical check
+
+Works well with a categorical (*factor*) covariate. We take *alder.VIP*
+as an example, see Figure \@ref(fig:gralder).
+
+```{r gralder, fig.cap = "Stratification wrt alder.VIP, women. log-log scale."}
+fit <- coxreg(Surv(exit, event) ~ strata(alder.VIP), data = vip)
+plot(fit, col = 1:4, lty = c(1, 2, 4, 5),
+     printLegend = "topleft", fn = "loglog")
+```
+
+On the *log-log* scale, the curves should have a constant vertical distance to each other,
+bu that seems less plausible, for instance are the curves corresponding to ages 30 and 40
+crossing.
+
+
+## Formal test
+
+We use the function *cox.zph* in the *survival* package. And we have to replace the call to
+*coxreg* with a call to *coxph*. They do the same job, but *coxreg* cannot cope with *cox.zph*. 
+So, see Table \@ref(tab:zph). It shows the results of tests of null hypotheses of proportionality,
+and we can see that the hypothesis concerning *alder.VIP* is clearly rejected (very small *p*-value).
+On the other hand, no big problem regarding *sex*, and the *GLOBAL* conclusion is that the model 
+as a whole does not fulfil the requirement of proportionality.
+
+```{r zph, results = 'asis'}
+fit <- coxph(Surv(exit, event) ~ alder.VIP, data = vip)
+zz <- cox.zph(fit)
+tbl(zz$table, caption = "Test of proportionality, women.", 
+    rownames = TRUE)
+```
+
+# Choice of age dependence
+
+We have no less than *three* variables referring to age in some way or the other, *exit*, 
+*alder_VIP* and *late*. We arrange them so that *exit* is the fundamental duration variable
+(measuring time between test and death), *alder.VIP* is age test group(time fixed), and 
+*late* measures the exact time between alder.VIP and age at test.
+
+Like this, see Table \@ref(tab:basic).
+
+```{r basic, results = 'asis'}
+fit.basic <- coxreg(Surv(exit, event) ~ snususe  + us.ar + late 
+                    + strata(alder.VIP), data = vip)
+fit.ph <- coxph(Surv(exit, event) ~ snususe + us.ar + late 
+                    + strata(alder.VIP), data = vip)
+ltx2(fit.basic, label = "tab:basic", caption = "Basic model, women.")
+```
+
+# Put on more covariates
+
+Like this, see Table \@ref(tab:basic2).
+
+```{r basic2, results = 'asis'}
+vip0 <- vip[!is.na(vip$education) &
+               !is.na(vip$inc.90), ]
+fit.basic <- coxreg(Surv(exit, event) ~ snususe  +  livingalone +
+                       education + inc.90 +
+                       us.ar + 
+                       Boende + late 
+                    + strata(alder.VIP), data = vip0)
+fit.ph <- coxph(Surv(exit, event) ~ snususe + livingalone +
+                   education + inc.90 +
+                   us.ar + Boende + 
+                   late 
+               + strata(alder.VIP)
+                , data = vip0[vip0$alder.VIP == "40", ])
+ltx2(fit.basic, label = "tab:basic2", caption = "Stratified by alder.VIP, women.")
+```
+
+
+A test of proportionality, see Table \@ref(tab:zph2).
+
+```{r zph2, results = 'asis'}
+zz <- cox.zph(fit.ph)
+tbl(zz$table, caption = "Test of proportionality.", 
+    rownames = TRUE)
+```
+
+Seems OK, with a small reservation for *inc.90*. The *GLOBAL* conclusion is OK.
+
+Not so much significance to talk about for *snususe*, when more covariates are added.
+However, we start by looking at each stratum  (age group) separately.
+
+## Age group 30
+
+```{r basic230, results = 'asis'}
+fit.basic <- coxreg(Surv(exit, event) ~ snususe  + livingalone +
+                       education + inc.90 +
+                       us.ar + 
+                       Boende + late 
+                    , data = vip0[vip0$alder.VIP == "30", ])
+fit.ph <- coxph(Surv(exit, event) ~ snususe + livingalone +
+                   education + inc.90 +
+                   us.ar + Boende + 
+                   late 
+               
+                , data = vip0[vip0$alder.VIP == "30", ])
+ltx2(fit.basic, label = "tab:basic230", caption = "alder.VIP = 30, women.")
+```
+
+## Age group 40
+
+```{r basic240, results = 'asis'}
+fit.basic <- coxreg(Surv(exit, event) ~ snususe + inc.90 +
+                       us.ar + livingalone +
+                       Boende + late, 
+                    data = vip0[vip0$alder.VIP == "40", ])
+fit.ph <- coxph(Surv(exit, event) ~ snususe + livingalone +
+                   education + inc.90 +
+                   us.ar + Boende + 
+                   late 
+               
+                , data = vip0[vip0$alder.VIP == "40", ])
+ltx2(fit.basic, label = "tab:basic240", caption = "alder.VIP = 40, women.")
+```
+
+## Age group 50
+
+```{r basic250, results = 'asis'}
+fit.basic <- coxreg(Surv(exit, event) ~ snususe  + livingalone +
+                       education + inc.90 +
+                       us.ar + 
+                       Boende + late 
+                    , data = vip0[vip0$alder.VIP == "50", ])
+fit.ph <- coxph(Surv(exit, event) ~ snususe  + livingalone +
+                   education + inc.90 +
+                   us.ar + Boende + 
+                   late 
+         
+                , data = vip0[vip0$alder.VIP == "50", ])
+ltx2(fit.basic, label = "tab:basic250", caption = "alder.VIP = 50, women.")
+```
+
+## Age group 60
+
+```{r basic260, results = 'asis'}
+fit.basic <- coxreg(Surv(exit, event) ~ snususe  + livingalone +
+                       education + inc.90 +
+                       us.ar + 
+                       Boende + late 
+                    , data = vip0[vip0$alder.VIP == "60", ])
+fit.ph <- coxph(Surv(exit, event) ~ snususe + livingalone +
+                   education + inc.90 +
+                   us.ar + Boende + 
+                   late 
+   
+                , data = vip0[vip0$alder.VIP == "60", ])
+ltx2(fit.basic, label = "tab:basic260", caption = "alder.VIP = 60, women.")
+```
+

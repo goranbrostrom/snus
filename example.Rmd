@@ -1,0 +1,183 @@
+---
+title: "Snus and mortality"
+author: "Göran Broström"
+date: "`r Sys.time()`"
+output:
+  bookdown::pdf_document2:
+    citation_package: natbib
+    keep_tex: yes
+    number_sections: yes
+    toc: yes
+    toc_depth: 3
+  bookdown::word_document2:
+    toc: no
+    toc_depth: 2
+  bookdown::html_document2:
+    number_sections: yes
+    toc: yes
+    toc_depth: 2
+    toc_float: yes
+citation_package: natbib
+classoption: titlepage
+bibliography: bio.bib
+titlepage: yes
+biblio-style: apalike
+documentclass: article
+fontsize: 11pt
+header-includes:
+- \usepackage[utf8]{inputenc}
+- \usepackage{graphicx}
+- \usepackage{a4wide}
+#- \usepackage[tablesonly]{endfloat}
+#- \renewcommand{\efloatseparator}{\mbox{}}
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+source("R/ltxCoef3.R")
+library(eha)
+```
+
+# Introduction
+
+We want to study the effect of snus use on overall mortality, controlling for age, sex,
+"frukt och grönt", education, and income.
+
+# Data
+
+All the data we need are stored in the file *vip.rds*, which is stored in the subdirectory *Rdata*.
+We read it and at the same time select the variables we need. First, construct a vector that 
+contains the names of the variables:
+
+```{r varlist}
+varnames <- c("LopNr", "provdat", "birthdate", "enter", "exit", "event", 
+              "snususe", "sex", "green", "education", "uincome")
+```
+
+Then we read *vip.rds* and make the selection at the same time. We give the selected subset the name *snuff* 
+(or whatever, not important).
+
+```{r readdata}
+snuff <- readRDS("Rdata/vip.rds")[, varnames]
+```
+
+Note the way selection is made: The "[, ]" is the key, rows are specified to the left of the comma, 
+and columns to the right. Specifying no rows (leaving empty as here) selects all rows (all persons).
+
+Let us look at our subsample, two help functions, *str* and *summary*, are useful:
+
+```{r str}
+str(snuff)
+```
+
+*str* is shorthand for *structure*, and that is what the function shows: A list of all variables, their *type* (num, Date, logic, Factor),
+which is helpful to know. The first few values of each variable is also presented.
+
+Then the *summary* function*:
+```{r summary}
+summary(snuff)
+```
+
+The variable *enter* is age at *provdat* (essentially *provdat* minus *birthdate*, expressed in years), 
+*exit* is age at "lost to follow-up* and *event* is a logical, *TRUE* if lost to follow-up is due to death,
+*FALSE* otherwise (could also be coded as 1 and 0, respectively).
+
+A thing to worry about is missing values (*NA*). Here I simply choose to remove all cases with any missing value:
+The function *na.omit* does that trick:
+
+```{r omit}
+snuff1 <- na.omit(snuff)
+NROW(snuff1)
+summary(snuff1)
+```
+
+Around 8000 individuals are lost due to this, leaving 43847 ones. More seriously, we lost a great number of deaths!
+Maybe we should make *NA* a separate category for *green* and *education* (luckily we kept the original *snuff*):
+
+```{r catna}
+snuff$green <- as.character(snuff$green) # Probably necessary ...
+snuff$green[is.na(snuff$green)] <- "unknown"
+snuff$green <- factor(snuff$green)
+## And education:
+snuff$education <- as.character(snuff$education)
+snuff$education[is.na(snuff$education)] <- "Unknown"
+snuff$education <- factor(snuff$education)
+## Remove missing:
+snuff1 <- na.omit(snuff)
+## Check result:
+summary(snuff1)
+```
+
+A little bit "complicated", but a rather frequent request, so it may be worthwhile to 
+write a general function \ldots
+
+Anyway, we saved the deaths!
+
+# Cox regression
+
+The first important question is to choose *start event* (time scale). Two possible choices: (i) Birth, and (ii) Prov.
+Since *age* is such a strong determinant of mortaltity, often (i) is chosen, but chosing (ii) also has merit 
+(keeping age at provat as a covariate).
+
+## Birth as start event
+
+See Table \@ref(tab:startbirth).
+
+```{r startbirth, results = "asis"}
+fit <- coxreg(Surv(enter, exit, event) ~ snususe + sex + green + education + I(uincome - 1550), 
+              data = snuff1)
+dr <- drop1(fit, test = "Chisq")
+ltxCoef3(fit, dr = dr, digits = 4, caption = "Birth as start event.", label = "tab:startbirth")
+```
+
+A few things to note:
+
+1.   The only effect of *green* seems to be that the *unknown* group has a very low mortality, relatively speaking.
+
+2.   For *education*, the effect of *unknown* is reversed, an extremely high mortality.
+
+3.   For *income* the CI is (1.0000, 1.0000), but it is significantly different from 1! This is a scale problem,
+easy to solve.
+
+4.   Center continuous covariates (income).
+
+## Prov as start event
+
+See Table \@ref(tab:startbirth).
+
+```{r startprov, results = "asis"}
+fit <- coxreg(Surv(exit - enter, event) ~ I(enter - 45) + snususe + sex + green + 
+                 education + I((uincome - 1550)/ 100), 
+              data = snuff1)
+dr <- drop1(fit, test = "Chisq")
+ltxCoef3(fit, dr = dr, digits = 4, caption = "Prov as start event.", label = "tab:startprov")
+```
+
+Note that *enter* in Table \@ref(tab:startprov) is *age at provtagning*. Otherwise similar 
+remarks as in the previous case. *Except* that we note that income now is scaled properly,
+and therefore the CI is useful \ldots
+
+### A graph of snuff mortality
+
+```{r plott, fig.cap = "Cumulative hazards after prov by snus use."}
+fit <- coxreg(Surv(exit - enter, event) ~ I(enter - 45) + strata(snususe) + sex + 
+                 green + education + I(uincome - 1550), 
+              data = snuff1)
+plot(fit, main = "", xlab = "Time after prov", col = c("black", "blue", "red"))
+```
+
+Let's end the follow-up at age 22:
+
+```{r resplott, fig.cap = "Cumulative hazards after prov by snus use, follow-up till 22."}
+snuff1$exit2 <- snuff1$exit - snuff1$enter
+snuff1$enter2 <- 0
+snuff2 <- age.window(snuff1, c(0, 22), surv = c("enter2", "exit2", "event"))
+fit <- coxreg(Surv(exit - enter, event) ~ I(enter - 45) + strata(snususe) + sex + 
+                 green + education + I(uincome - 1550), 
+              data = snuff2)
+plot(fit, main = "", xlab = "Time after prov", col = c("black", "blue", "red"))
+```
+
+# Conclusion
+
+This was an intro to how an analysis may start up. Saw already some questions that need answers. 

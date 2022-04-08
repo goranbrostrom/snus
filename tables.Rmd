@@ -1,0 +1,217 @@
+---
+title: "Tables and graphs"
+author: "Göran Broström"
+date: "`r Sys.Date()`"
+output:
+  bookdown::pdf_document2:
+    citation_package: natbib
+    keep_tex: yes
+    number_sections: yes
+    toc: no
+    toc_depth: 3
+  bookdown::word_document2:
+    toc: no
+    toc_depth: 2
+  bookdown::html_document2:
+    number_sections: yes
+    toc: yes
+    toc_depth: 2
+    toc_float: yes
+citation_package: natbib
+##classoption: titlepage
+bibliography: bio.bib
+##titlepage: no
+biblio-style: apalike
+documentclass: article
+fontsize: 11pt
+header-includes:
+- \usepackage[utf8]{inputenc}
+- \usepackage{graphicx}
+- \usepackage{a4wide}
+- \usepackage[figuresonly]{endfloat}
+- \renewcommand{\efloatseparator}{\mbox{}}
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, comment = "")
+```
+
+# Tables
+
+## stargazer
+
+```{r starg, results='asis', message = FALSE}
+vip <- readRDS("Rdata/vip.rds")
+names(vip) <- gsub("_", ".", names(vip))
+## Warning: The following is not necessary with latest version of vip!
+vip$exit <- vip$exit - vip$enter
+vip$age <- vip$enter
+vip$enter <- NULL
+kont <- vip[, c("income.90", "age", "exit", "bmi", "sex", "alder.VIP", "snususe")]
+library(stargazer)
+stargazer(kont, title = "vip data.", header = FALSE, summary = TRUE, 
+          label = "tab:starg")
+```
+
+The columns in Table \@ref(tab:starg) are the default ones chosen by *stargazer*. Can
+be manipulated.
+
+
+<!--
+This is out-commented code. The same procedure as in HTML code. (If you know how 
+to program in HTML, you can use it in the .Rmd document)
+
+# xtable
+
+```{r xtab, results = 'asis', message = FALSE, eval = FALSE}
+esd <- unlist(lapply(kont, sd, na.rm = TRUE))
+emean <- colMeans(kont, na.rm = TRUE)
+
+library(xtable)
+print(xtable(summary(kont)), comment = FALSE, include.rownames = FALSE)
+
+```
+
+-->
+
+## stargazer och coxph vs coxreg och ltxCoef3
+
+
+```{r konfidens, results='asis'}
+library(stargazer)
+library(survival)
+fit <- coxph(Surv(exit, event) ~ sex + age + 
+                us.ar + snususe, data = vip)
+stargazer(fit, ci = TRUE, apply.coef = exp, ##apply.ci = exp, måste bort!!
+          star.char = "", caption = "coxph and stargazer.", report = "vcsp")
+```
+
+Not very good output. No p-value for *snususe* and unreliabel ones for the 
+reported contrasts. And some noisy output at the end.
+
+```{r coxreg, results = 'asis'}
+library(eha)
+fit <- coxreg(Surv(exit, event) ~ sex + age + 
+                us.ar + snususe, data = vip)
+source("R/ltxCoef3.R")
+dr <- drop1(fit, test = "Chisq")
+ltxCoef3(fit, dr = dr, caption = "coxreg med ltxCoef3.", digits = 3)
+```
+
+
+
+## Contingency table
+
+Create Table \@ref(tab:twobytwo).
+
+```{r twobytwo}
+x <- with(vip, table(sex, snususe))
+source("R/tbl.R")
+tbl(x, caption = "Sex and snus use.", rownames = TRUE)
+```
+
+Table \@ref(tab:twobytwo) is analysed with a $\chi^2$ test:
+
+```{r chisqt}
+y <- chisq.test(x)
+y
+```
+
+As expected, snus habits are very different for men and women. See Table 
+\@ref(tab:propts) with relative frequencies (per cent).
+
+```{r propts}
+xx <- round(prop.table(x, margin = 1) * 100, 1)
+tbl(addmargins(xx, margin = 2),  # Why not 'margin = 1, as above? Check help!
+    caption = "Sex and snus use, relative frequencies.",
+    rownames = TRUE)
+```
+
+
+## ftable three-way
+
+```{r three}
+mytab <- xtabs(~ snususe + sex + alder.VIP, data = vip)
+ftable(mytab)
+```
+
+Need to investigate further \ldots
+
+# Graphs
+
+## Barplots
+
+for instance, Table  \@ref(tab:propts) is illustrated in Figure \@ref(fig:proptsfig).
+
+```{r proptsfig, fig.cap = "Snus use, men and women."}
+barplot(xx, beside = TRUE, col = c("blue", "red"), ylab = "Per cent",
+        legend.text = c("Men", "Women"))
+abline(h = 0)
+```
+
+
+## lattice
+
+I am using the package *lattice* for this, but it is probably almost as easy to 
+do it "by hand", to get control over the layout and "things" \ldots
+
+See Figure \@ref(fig:lattbmi) and so on.
+
+
+```{r lattbmi, fig.cap = "BMI by sex and snus use.", fig.height = 6}
+library(lattice)
+library(latticeExtra)
+densityplot(~ bmi | sex + snususe, data = vip, plot.points = FALSE)
+```
+
+```{r lattinc, fig.cap = "Income by sex and snus use.", fig.height = 6}
+library(lattice)
+library(latticeExtra)
+densityplot(~ income.90 | sex + snususe, data = vip, plot.points = FALSE)
+```
+
+Figure \@ref(fig:lattinc) is severely distorted by the fact that a few non-snuffing 
+men have fantasy incomes. We restrict income to below 1 million SEK in Figure 
+\@ref(fig:lattinc2).
+
+```{r lattinc2, fig.cap = "Income (truncated at 10000) by sex and snus use.", fig.height = 6}
+library(lattice)
+library(latticeExtra)
+densityplot(~ income.90 | sex + snususe, data = vip, plot.points = FALSE,
+            xlim = c(0, 10000), xlab = "Truncated income by sex and snus use.")
+```
+
+
+
+```{r lattage, fig.cap = "Age at start by sex and snus use.", fig.height = 6}
+library(lattice)
+library(latticeExtra)
+densityplot(~ age | sex + snususe, data = vip, plot.points = FALSE)
+```
+
+Figure \@ref(fig:lattage) is also distorted by severe heaping in age at start. 
+Not so useful.
+
+```{r lattsbt, fig.cap = "Systolic blood pressure (sbt) by sex and snus use.", fig.height = 6}
+library(lattice)
+library(latticeExtra)
+densityplot(~ sbt | sex + snususe, data = vip, plot.points = FALSE)
+```
+
+## From scratch
+
+Replacing *lattice*, we can try building from scratch.
+
+```{r fromscratch}
+dplo <- function(value, head = "Men, never"){
+   ## value = what is plotted
+   value <- value[!is.na(value)]
+   y <- density(value)
+   plot(y$x, y$y, main = head, type = "l", lwd = 1.5, col = "blue",
+        ylab = "Density")
+   abline(h = 0)
+}
+
+```
+
