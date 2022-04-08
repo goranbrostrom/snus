@@ -1,0 +1,114 @@
+---
+title: "Grunder"
+author: "Göran Broström"
+date: "`r Sys.Date()`"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Datahantering
+
+Vi har rådatafilen, en statafil, *ses_ink_utb.dta*, som ligger i underkatalogen
+*Data* (på min dator). Vi läser in den med hjälp av R-paketet *haven*:
+
+```{r readdata}
+library(haven)
+inkutb <- as.data.frame(read_dta("Data/ses_ink_utb.dta"))
+```
+
+och får vår rådatafil som en "data frame" med namn 'inkutb' (som jag själv hittar på).
+Den är stor, 76 variabler och 108459 individer, så vi skriver inte ut den.
+
+Filen 'smallvip.rds', som jag skickade, innehåller inkomst, datum och tidsfösskjutning,
+endast fyra variabler, så vi kan skriva ut de första fem raderna (individerna) med kommandot **head**.
+
+Men först läsa in:
+
+```{r readdata2}
+smallvip <- readRDS("Rdata/smallvip.rds")
+```
+
+och sen skriva ut fem rader
+
+```{r skriva ut}
+head(smallvip, 5)
+```
+
+På första raden ser vi att individ Nr 248 har inkomsten *(uincome)* 2139, och eftersom 
+fördröjningen (uinklag) är 0 och året är 2012 (se provdat), så borde vi hitta det beloppet på
+individ 248 i rådatafilen *inkutb*.
+
+Vi får all info om 248 i *inkutb* genom
+
+```{r infu}
+inkutb[inkutb$LopNr == 248, ]
+```
+
+(en förfärlig massa!), och efter lite letande kan du se att*DispInk04_2012* verkligen är 2139!
+
+Vi testar rad två i *smallvip*:  LopNr = 425, inkomst 1522, år 2014, men lag = 1. Vi får kolla
+*DispInk04_2013* i *inkutb* för 425:
+
+```{r}
+inkutb$DispInk04_2013[inkutb$LopNr == 425]
+```
+
+Rätt igen! Och lite mindre skräp i utskriften. Testa på egen hand några andra *LopNr*!
+
+# Kommentar
+
+## Likhet, tilldelning
+
+Testa likhet gör man med *==*, alltså två likhetstecken. Exempel:
+
+```{r testalika}
+2 == 3
+2 == 2
+```
+
+*Ett* likhetstecken är *tilldelning* (synonymt med *<-*):
+
+```{r tiid}
+x = 3
+x
+x == 2
+x == 3
+x + 2 == 5
+```
+
+## Delmängder av dataramar ("data frames")
+
+Tänk på en dataram som en matris, vi kollar smallvip:
+
+```{r kollasmall}
+head(smallvip)
+```
+
+Man plockar ut element genom att ange *rad, kolumn*:
+
+```{r plocka}
+smallvip[2, 3]
+smallvip[3, ]
+smallvip[2:4, 1]
+smallvip[c(2, 4), 1:3]
+smallvip[smallvip$LopNr == 525, ]
+```
+
+Man kan välja rader (eller kolumner) på två sätt: Antingen genom att ge explicita radnummer, eller
+med *logiska villkor*. Exempel på det senare:
+
+```{r villkor}
+poor <- smallvip[smallvip$uincome < 2, ]
+(n.poor <- NROW(poor))
+```
+
+Så, `r n.poor` personer har en inkomst på 1 eller mindre.
+
+**Notera:** *Blankt* före eller efter kommat betyder *alla* (före = rader, efter = kolumner).
+
+# Frågor?
