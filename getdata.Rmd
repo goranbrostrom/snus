@@ -3,7 +3,7 @@ title: "Snusning och mortalitet, databearbetning"
 author: "Byhamre & Broström"
 date: "`r Sys.time()`"
 output:
-  bookdown::pdf_document2:
+  bookdown::pdf_document2: 
     citation_package: natbib
     keep_tex: yes
     number_sections: yes
@@ -45,7 +45,6 @@ the function *read_dta* in the package *haven*.
 ```{r haven}
 library(haven)
 utd <- as.data.frame(read_spss("Data/vip.sav"))
-
 ```
 
 # Basala edits
@@ -108,8 +107,14 @@ utd$exit <- with(utd, as.numeric((slutdat - birthdate) / 365.25) - age) # Nytt!
 ## Ensamboende
 
 ```{r livingalone}
-utd$b3h[is.na(utd$b3h)] <- 0
-utd$livingalone <- factor(utd$b3h, labels = c("No", "Yes"))
+lival <- utd$b3h
+lival[is.na(lival)] <- 0 # Temporarily...
+bcs <- paste0("b3", letters[1:7]) # b3a -- b3g
+urk <- utd[, bcs]
+miss <- logical(NROW(urk))
+for (i in 1:NROW(urk)) miss[i] <- all(is.na(urk[i, ])) # alla på rad i = NA
+lival[(lival == 0) & miss] <- NA
+utd$livingalone <- factor(lival, labels = c("No", "Yes"))
 ```
 
 ## Diabetes
