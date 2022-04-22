@@ -54,43 +54,42 @@ vip$snususe <- factor(vip$snususe)
 ## All-cause mortality
 ### Crude model
 ```{r crudeall, results='asis'}
-library(eha)
-source("R/ltx2.R")
-fit <- coxreg(Surv(exit, event) ~ snususe, data = vip)
+##library(eha)
+##source("R/ltx2.R")
+fit <- coxreg(Surv(exit, event) ~ snususe + strata(alder.VIP), data = vip)
 
-ltx2(fit, digits = 4, caption = "All-cause mortality, crude model")
+ltx2(fit, digits = 4, caption = "All-cause mortality, crude model.")
 ```
 
 ### Basic model
 ```{r basicall, results='asis'}
-library(eha)
+##library(eha)
 
-fit <- coxreg(Surv(exit, event) ~ sex + age +
-                   us.ar + snususe, data = vip)
-dr <- drop1(fit, test = "Chisq")
+fit <- coxreg(Surv(exit, event) ~ sex + 
+                   us.ar + snususe + strata(alder.VIP), data = vip)
+##dr <- drop1(fit, test = "Chisq")
 ltx2(fit, caption = "All-cause mortality, basic model")
 ```
 
 ### Multivariable model
 ```{r multiall, results='asis'}
-vip0 <- na.omit(vip[, c("exit", "event", "age", "snususe", "sex", "us.ar", "livingalone", "education", "Boende", "income.90", "phyact")])
-fit <- coxreg(Surv(exit, event) ~ snususe + age + sex + us.ar + livingalone + education + 
-                Boende + income.90 + phyact,  data = vip0)
+##vip0 <- na.omit(vip[, c("exit", "event", "age", "snususe", "sex", "us.ar", "livingalone", "education", "Boende", "income.90", "phyact")])
+fit <- coxreg(Surv(exit, event) ~ snususe + sex + us.ar + livingalone + education + 
+                Boende + income.90 + phyact + strata(alder.VIP),  data = vip)
 
-ltx2(fit,  
-         caption = "All-cause mortality, multivariable model")
+ltx2(fit, caption = "All-cause mortality, multivariable model.")
 ```
 
 ### Mediator model
 ```{r mediatorall, results='asis'}
-vip0 <- (vip[, c("exit", "event", "snususe", "age", "sex", "us.ar", "livingalone", "education", "Boende", "income.90", "phyact", "dependent", "diabetes", "bmi", "alder.VIP")])
-vip0$dependent[is.na(vip0$dependent)] <- FALSE
-vip0$diabetes[is.na(vip0$diabetes)] <- "No"
-vip0 <- na.omit(vip0)
-fit <- coxreg(Surv(exit, event) ~ snususe + sex + us.ar + livingalone + education + factor(alder.VIP) +
-                Boende + income.90 + phyact + dependent + diabetes + bmi,  data = vip0)
+##vip0 <- (vip[, c("exit", "event", "snususe", "age", "sex", "us.ar", "livingalone", "education", ##"Boende", "income.90", "phyact", "dependent", "diabetes", "bmi", "alder.VIP")])
+#vip0$dependent[is.na(vip0$dependent)] <- FALSE
+##vip0$diabetes[is.na(vip0$diabetes)] <- "No"
+##vip0 <- na.omit(vip0)
+fit <- coxreg(Surv(exit, event) ~ snususe + sex + us.ar + livingalone + education + strata(alder.VIP) +
+                Boende + income.90 + phyact + dependent + diabetes + bmi,  data = vip)
 
 ltx2(fit,  
-         caption = "All-cause mortality, mediator model")
+         caption = "All-cause mortality, mediator model.")
 ```
 
